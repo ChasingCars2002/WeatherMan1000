@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wear4Weather &mdash; WeatherMan1000</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <h1>Wear4Weather</h1>
+        <p class="tag">Your personal stylist + meteorologist. Drop a ZIP, get a fit.</p>
+      </header>
+
+      <form id="zip-form" class="zip-form" autocomplete="off">
+        <label for="zip" class="visually-hidden">US ZIP code</label>
+        <input
+          id="zip"
+          name="zip"
+          type="text"
+          inputmode="numeric"
+          pattern="\d{5}"
+          maxlength="5"
+          placeholder="Enter a 5-digit ZIP (e.g. 49503)"
+          required
+        />
+        <button type="submit" id="go-btn">Style me</button>
+      </form>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="result" class="result" hidden>
+        <div class="location">
+          <h2 id="place"></h2>
+          <p id="now" class="now"></p>
+        </div>
+
+        <div class="card">
+          <h3>Summary</h3>
+          <p id="summary"></p>
+        </div>
+
+        <div class="card">
+          <h3>The Outfit</h3>
+          <p id="outfit"></p>
+        </div>
+
+        <div class="card">
+          <h3>Must-Haves</h3>
+          <ul id="must-haves"></ul>
+        </div>
+
+        <div class="card">
+          <h3>Style Tip</h3>
+          <p id="tip"></p>
+        </div>
+
+        <details class="forecast">
+          <summary>6-hour forecast detail</summary>
+          <table id="forecast-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Temp (&deg;F)</th>
+                <th>Humidity</th>
+                <th>Precip %</th>
+                <th>Wind (mph)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </details>
+      </section>
+
+      <footer class="foot">
+        <small>Weather: Open-Meteo &middot; Geocoding: Zippopotam.us</small>
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
