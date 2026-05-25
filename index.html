@@ -3,14 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Wear4Weather &mdash; WeatherMan1000</title>
+    <title>WEATHERMAN1000 // Wear4Weather</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=VT323&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="shell">
       <header class="hero">
         <h1>Wear4Weather</h1>
-        <p class="tag">Your personal stylist + meteorologist. Drop a ZIP, get a fit.</p>
+        <p class="tag">&#9658; Your personal stylist + meteorologist. Drop a ZIP, get a fit. &#9668;</p>
       </header>
 
       <form id="zip-form" class="zip-form" autocomplete="off">
@@ -22,10 +25,10 @@
           inputmode="numeric"
           pattern="\d{5}"
           maxlength="5"
-          placeholder="Enter a 5-digit ZIP (e.g. 49503)"
+          placeholder="ENTER 5-DIGIT ZIP CODE"
           required
         />
-        <button type="submit" id="go-btn">Style me</button>
+        <button type="submit" id="go-btn">EXECUTE</button>
       </form>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
@@ -57,7 +60,7 @@
         </div>
 
         <details class="forecast">
-          <summary>6-hour forecast detail</summary>
+          <summary>&#9658; 6-HOUR FORECAST DATA</summary>
           <table id="forecast-table">
             <thead>
               <tr>
@@ -74,7 +77,7 @@
       </section>
 
       <footer class="foot">
-        <small>Weather: Open-Meteo &middot; Geocoding: Zippopotam.us</small>
+        <small>&#9658; Weather: Open-Meteo &nbsp;&middot;&nbsp; Geocoding: Zippopotam.us &#9668;</small>
       </footer>
     </main>
 
