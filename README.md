@@ -1,7 +1,9 @@
 # WeatherMan1000 &mdash; Wear4Weather
 
 A tiny static web app: enter a US ZIP code, get a 6-hour forecast plus a
-head-to-toe outfit recommendation from the Wear4Weather stylist.
+head-to-toe outfit recommendation from the Wear4Weather stylist &mdash; presented
+in an 8-bit retro-game style, complete with a pixel-art character who dresses
+for the weather.
 
 ## Run locally
 
@@ -32,8 +34,15 @@ deep-link with `?zip=49503` to auto-run on load.
    - Precipitation logic (carry vs. waterproof everything)
    - 6-hour rule (adaptable layers when temps swing &gt;10&deg;F)
    - Wind + sun callouts
-4. **Render** &mdash; Summary / Outfit / Must-Haves / Style Tip, plus an
-   expandable hourly forecast table.
+4. **Render** &mdash; Weather Report / Equipped Gear / Inventory / Pro Tip
+   cards, plus an expandable hourly forecast table.
+5. **Pixel scene** &mdash; a 64&times;64 canvas (scaled up with
+   `image-rendering: pixelated`) draws an animated character dressed for the
+   conditions: parka/beanie/scarf in the cold, tee and shorts in the heat,
+   a yellow rain slicker, boots, and umbrella when precipitation is likely.
+   The scene also animates the weather itself &mdash; sun, clouds, fog,
+   wind-slanted rain, drifting snow, lightning, and a starry night sky after
+   dark. Respects `prefers-reduced-motion`.
 
 ## Files
 
