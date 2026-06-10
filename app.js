@@ -14,6 +14,8 @@ const outfitEl = document.getElementById("outfit");
 const mustHavesEl = document.getElementById("must-haves");
 const tipEl = document.getElementById("tip");
 const forecastTbody = document.querySelector("#forecast-table tbody");
+const sceneCanvas = document.getElementById("scene");
+const sceneCaption = document.getElementById("scene-caption");
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -288,6 +290,7 @@ function analyze(forecast) {
   return {
     summary,
     outfit,
+    zone,
     mustHaves: dedupedMustHaves.slice(0, 5),
     tip,
     stats: { high, low, avgHumidity, maxPrecipPct, maxWind, dominantPrecip },
@@ -336,6 +339,366 @@ function render(place, forecast, analysis) {
   }
 
   resultEl.hidden = false;
+  renderScene(forecast, analysis);
+}
+
+// ---------------------------------------------------------------------------
+// 8-bit scene: a pixel character dressed for the weather, on a 64x64 canvas.
+// ---------------------------------------------------------------------------
+
+const SCENE_W = 64;
+const SCENE_H = 64;
+const GROUND_Y = 57;
+const COLORS = {
+  ink: "#0f0f1b",
+  skin: "#eec39a",
+  hair: "#5d275d",
+  white: "#f4f4f4",
+  red: "#b13e53",
+  yellow: "#ffcd75",
+  green: "#38b764",
+  blue: "#3b5dc9",
+  lightBlue: "#41a6f6",
+  navy: "#333c57",
+  gray: "#94b0c2",
+  brown: "#7a4841",
+};
+
+let sceneRaf = null;
+const reduceMotion =
+  window.matchMedia &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Decide what the character wears from the analysis.
+function outfitFor(analysis) {
+  const { zone, stats } = analysis;
+  const o = {
+    top: COLORS.blue,
+    sleeves: "long",
+    legs: "pants",
+    pants: COLORS.navy,
+    shoes: COLORS.brown,
+    bootsTall: false,
+    hat: null, // null | "beanie" | "brim" | "hood"
+    hatColor: COLORS.red,
+    scarf: false,
+    gloves: false,
+    sunglasses: false,
+    umbrella: false,
+    caption: "",
+  };
+
+  switch (zone) {
+    case "extreme-cold":
+      o.top = COLORS.red;
+      o.hat = "beanie";
+      o.hatColor = COLORS.yellow;
+      o.scarf = true;
+      o.gloves = true;
+      o.bootsTall = true;
+      o.shoes = COLORS.ink;
+      o.caption = "FULL WINTER ARMOR EQUIPPED";
+      break;
+    case "cold":
+      o.top = COLORS.green;
+      o.hat = "beanie";
+      o.gloves = true;
+      o.caption = "HEAVY COAT EQUIPPED";
+      break;
+    case "cool":
+      o.top = COLORS.blue;
+      o.caption = "LIGHT JACKET EQUIPPED";
+      break;
+    case "mild":
+      o.top = COLORS.lightBlue;
+      o.caption = "LONG SLEEVES EQUIPPED";
+      break;
+    case "warm":
+      o.top = COLORS.green;
+      o.sleeves = "short";
+      o.legs = "shorts";
+      o.sunglasses = true;
+      o.caption = "TEE + SHORTS EQUIPPED";
+      break;
+    default: // hot
+      o.top = COLORS.white;
+      o.sleeves = "short";
+      o.legs = "shorts";
+      o.pants = COLORS.lightBlue;
+      o.sunglasses = true;
+      o.hat = "brim";
+      o.hatColor = COLORS.yellow;
+      o.caption = "SUN GEAR EQUIPPED";
+  }
+
+  if (stats.maxPrecipPct >= 50) {
+    // Rain slicker overrides the outer layer.
+    o.top = COLORS.yellow;
+    o.sleeves = "long";
+    o.hat = "hood";
+    o.hatColor = COLORS.yellow;
+    o.sunglasses = false;
+    o.bootsTall = true;
+    o.shoes = COLORS.green;
+    o.umbrella = true;
+    o.caption =
+      stats.dominantPrecip === "snow"
+        ? "SNOW SHIELD EQUIPPED"
+        : "RAIN SLICKER EQUIPPED";
+  } else if (stats.maxPrecipPct >= 30) {
+    o.umbrella = true;
+    o.caption += " +UMBRELLA";
+  }
+
+  return o;
+}
+
+function buildSceneState(forecast, analysis) {
+  const code = forecast.current.weathercode;
+  const hour = new Date(forecast.current.time).getHours();
+  const night = hour < 6 || hour >= 20;
+  const precip = precipType(code);
+  const cloudy = [2, 3, 45, 48].includes(code) || precip != null;
+  const foggy = [45, 48].includes(code);
+  const storm = [95, 96, 99].includes(code);
+  const windSlant = Math.min(forecast.current.windMph / 15, 2);
+  const snowGround =
+    precip === "snow" || analysis.stats.dominantPrecip === "snow";
+
+  // Falling weather particles.
+  const particles = [];
+  const count = precip === "snow" ? 28 : precip === "drizzle" ? 16 : precip ? 36 : 0;
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * SCENE_W,
+      y: Math.random() * SCENE_H,
+      speed: precip === "snow" ? 0.25 + Math.random() * 0.25 : 1.2 + Math.random(),
+      drift: Math.random() * Math.PI * 2,
+    });
+  }
+
+  return {
+    outfit: outfitFor(analysis),
+    night,
+    precip,
+    cloudy,
+    foggy,
+    storm,
+    windSlant,
+    snowGround,
+    particles,
+  };
+}
+
+function renderScene(forecast, analysis) {
+  if (!sceneCanvas) return;
+  const state = buildSceneState(forecast, analysis);
+  sceneCaption.textContent = state.outfit.caption;
+
+  const ctx = sceneCanvas.getContext("2d");
+  if (sceneRaf) cancelAnimationFrame(sceneRaf);
+  if (reduceMotion) {
+    drawFrame(ctx, state, 0);
+    return;
+  }
+  let frame = 0;
+  const loop = () => {
+    drawFrame(ctx, state, frame++);
+    sceneRaf = requestAnimationFrame(loop);
+  };
+  loop();
+}
+
+function drawFrame(ctx, state, frame) {
+  const px = (x, y, w, h, c) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(Math.round(x), Math.round(y), w, h);
+  };
+
+  // Sky
+  px(0, 0, SCENE_W, SCENE_H, state.night ? "#10122b" : state.cloudy ? "#5a6988" : "#41a6f6");
+
+  if (state.night) {
+    // Stars (skip when overcast) + moon
+    if (!state.cloudy) {
+      const stars = [[6, 8], [18, 4], [30, 10], [44, 6], [56, 12], [12, 16], [50, 20]];
+      stars.forEach(([x, y], i) => {
+        if ((frame >> 5) % 2 === i % 2) px(x, y, 1, 1, COLORS.white);
+      });
+      px(48, 5, 8, 8, COLORS.yellow);
+      px(46, 7, 2, 4, COLORS.yellow);
+      px(50, 7, 4, 4, "#10122b"); // crescent bite
+    }
+  } else if (!state.cloudy) {
+    // Sun with blinking rays
+    px(7, 7, 8, 8, COLORS.yellow);
+    px(9, 5, 4, 12, COLORS.yellow);
+    px(5, 9, 12, 4, COLORS.yellow);
+    if ((frame >> 4) % 2 === 0) {
+      px(3, 10, 2, 2, COLORS.yellow);
+      px(17, 10, 2, 2, COLORS.yellow);
+      px(10, 3, 2, 2, COLORS.yellow);
+      px(10, 17, 2, 2, COLORS.yellow);
+    }
+  }
+
+  if (state.cloudy) {
+    const drift = reduceMotion ? 0 : Math.floor(frame / 12) % (SCENE_W + 24);
+    drawCloud(px, ((8 + drift) % (SCENE_W + 24)) - 12, 6, state.night);
+    drawCloud(px, ((40 + drift) % (SCENE_W + 24)) - 12, 14, state.night);
+  }
+
+  // Lightning flash
+  if (state.storm && frame % 160 < 6) {
+    px(0, 0, SCENE_W, SCENE_H, "rgba(255,255,255,0.35)");
+    px(12, 0, 3, 14, COLORS.yellow);
+    px(9, 14, 3, 10, COLORS.yellow);
+    px(12, 24, 3, 8, COLORS.yellow);
+  }
+
+  // Ground
+  px(0, GROUND_Y, SCENE_W, SCENE_H - GROUND_Y, state.snowGround ? COLORS.white : state.night ? "#1e3a2f" : COLORS.green);
+  px(0, GROUND_Y, SCENE_W, 1, state.snowGround ? COLORS.gray : "#2a8a4a");
+
+  drawCharacter(px, state.outfit, frame);
+
+  // Fog overlay
+  if (state.foggy) {
+    for (let y = 18; y < 54; y += 8) {
+      const off = reduceMotion ? 0 : Math.floor(frame / 8 + y) % 16;
+      px(0, y + (off > 8 ? 1 : 0), SCENE_W, 3, "rgba(244,244,244,0.25)");
+    }
+  }
+
+  // Precipitation particles
+  for (const p of state.particles) {
+    if (!reduceMotion) {
+      p.y += p.speed;
+      if (state.precip === "snow") {
+        p.x += Math.sin((frame + p.drift * 60) / 20) * 0.3 + state.windSlant * 0.2;
+      } else {
+        p.x += state.windSlant * 0.4;
+      }
+      if (p.y > GROUND_Y) {
+        p.y = -2;
+        p.x = Math.random() * SCENE_W;
+      }
+      if (p.x > SCENE_W) p.x -= SCENE_W;
+    }
+    if (state.precip === "snow") {
+      px(p.x, p.y, 1, 1, COLORS.white);
+    } else {
+      px(p.x, p.y, 1, 2, COLORS.lightBlue);
+    }
+  }
+}
+
+function drawCloud(px, x, y, night) {
+  const c = night ? "#3a4466" : "#dfe9f5";
+  px(x + 2, y + 2, 16, 4, c);
+  px(x + 5, y, 8, 2, c);
+  px(x, y + 4, 20, 2, c);
+}
+
+// The character: drawn around x=19..45, standing on the ground line.
+function drawCharacter(px, o, frame) {
+  const bob = reduceMotion ? 0 : (frame >> 4) % 2; // idle animation
+  const y = (v) => v + bob;
+
+  // Umbrella (behind the body)
+  if (o.umbrella) {
+    px(43, y(12), 2, 28, COLORS.navy); // pole
+    px(40, y(6), 8, 2, COLORS.red);
+    px(36, y(8), 16, 2, COLORS.red);
+    px(33, y(10), 22, 2, COLORS.red);
+    px(33, y(12), 22, 1, "#7d2a3b");
+  }
+
+  // Legs
+  if (o.legs === "shorts") {
+    px(25, y(42), 6, 5, o.pants);
+    px(33, y(42), 6, 5, o.pants);
+    px(26, y(47), 4, 5, COLORS.skin);
+    px(34, y(47), 4, 5, COLORS.skin);
+  } else {
+    px(25, y(42), 6, 10, o.pants);
+    px(33, y(42), 6, 10, o.pants);
+  }
+
+  // Shoes / boots (feet stay planted, so no bob)
+  if (o.bootsTall) {
+    px(24, 49 + bob, 7, 8 - bob, o.shoes);
+    px(33, 49 + bob, 7, 8 - bob, o.shoes);
+  } else {
+    px(24, 53, 7, 4, o.shoes);
+    px(33, 53, 7, 4, o.shoes);
+  }
+
+  // Torso
+  px(24, y(28), 16, 14, o.top);
+  px(24, y(40), 16, 2, shade(o.top)); // hem
+
+  // Arms
+  if (o.sleeves === "short") {
+    px(19, y(29), 5, 4, o.top);
+    px(40, y(29), 5, 4, o.top);
+    px(20, y(33), 4, 8, COLORS.skin);
+    px(40, y(33), 4, 8, COLORS.skin);
+  } else {
+    px(19, y(29), 5, 12, o.top);
+    px(40, y(29), 5, 12, o.top);
+  }
+  // Hands / gloves
+  const handColor = o.gloves ? COLORS.red : COLORS.skin;
+  px(20, y(41), 4, 3, handColor);
+  px(40, y(41), 4, 3, handColor);
+
+  // Head
+  px(26, y(15), 12, 12, COLORS.skin);
+
+  // Hair / hat
+  if (o.hat === "beanie") {
+    px(25, y(12), 14, 5, o.hatColor);
+    px(25, y(16), 14, 2, shade(o.hatColor)); // fold
+    px(31, y(10), 3, 3, COLORS.white); // pompom
+  } else if (o.hat === "brim") {
+    px(28, y(10), 8, 6, o.hatColor);
+    px(22, y(15), 20, 2, o.hatColor);
+  } else if (o.hat === "hood") {
+    px(25, y(12), 14, 5, o.hatColor);
+    px(24, y(15), 3, 11, o.hatColor);
+    px(37, y(15), 3, 11, o.hatColor);
+  } else {
+    px(26, y(13), 12, 4, COLORS.hair);
+    px(26, y(17), 2, 3, COLORS.hair);
+    px(36, y(17), 2, 3, COLORS.hair);
+  }
+
+  // Face
+  if (o.sunglasses) {
+    px(27, y(20), 10, 3, COLORS.ink);
+    px(26, y(20), 1, 1, COLORS.ink);
+    px(37, y(20), 1, 1, COLORS.ink);
+  } else {
+    px(28, y(20), 2, 2, COLORS.ink);
+    px(34, y(20), 2, 2, COLORS.ink);
+  }
+  px(30, y(24), 4, 1, "#c98a68"); // mouth
+
+  // Scarf
+  if (o.scarf) {
+    px(25, y(26), 14, 3, COLORS.green);
+    px(35, y(29), 4, 6, COLORS.green);
+  }
+}
+
+// Slightly darker version of a hex color, for hems and folds.
+function shade(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(((n >> 16) & 255) - 48, 0);
+  const g = Math.max(((n >> 8) & 255) - 48, 0);
+  const b = Math.max((n & 255) - 48, 0);
+  return `rgb(${r},${g},${b})`;
 }
 
 // Convenience: prefill with the example ZIP if URL has ?zip=
